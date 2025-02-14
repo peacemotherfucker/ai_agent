@@ -1,0 +1,17 @@
+# Configuration for Autonomous Linux Command Executor
+max_steps: 10
+timeout: 30
+history_size: 5
+log_level: "INFO"
+
+# List of dangerous commands that will be blocked
+dangerous_commands:
+  - "rm"
+  - "mkfs"
+  - "dd"
+  - "fork"
+  - ">"
+  - "sudo"
+  - "mv"
+  - "chmod"
+  - "chown"
