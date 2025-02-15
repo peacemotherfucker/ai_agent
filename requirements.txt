@@ -1,6 +1,5 @@
-openai>=1.0.0
+openai
 python-dotenv
-pyyaml==6.0.1
 pyyaml
-tenacity>=8.0.0
-typing-extensions>=4.0.0
+tenacity
+typing-extensions

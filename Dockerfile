@@ -1,4 +1,4 @@
-FROM python:3.9-slim as builder
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
@@ -12,29 +12,19 @@ RUN pip install -r requirements.txt --target=/app/local
 
 # ---
 
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
-
-# Create secure non-root user
-RUN addgroup --system appuser && \
-    adduser --system --ingroup appuser appuser && \
-    mkdir -p /home/appuser/local
 
 # Copy application code
 COPY . .
 
-# Set proper permissions on the /app directory
-RUN chown -R appuser:appuser /app
+# Copy built dependencies
+COPY --from=builder /app/local /usr/local
 
-# Copy built dependencies to appuser's local directory
-COPY --from=builder /app/local /home/appuser/local
+RUN touch /command_executor.log
 
-RUN touch /home/appuser/command_executor.log && chown appuser:appuser /home/appuser/command_executor.log
-
-USER appuser
-
-ENV PYTHONPATH="/home/appuser/local:${PYTHONPATH}"
-ENV PATH="/home/appuser/local/bin:${PATH}"
+ENV PYTHONPATH="/usr/local:${PYTHONPATH}"
+ENV PATH="/usr/local/bin:${PATH}"
 
 ENTRYPOINT ["python", "script.py"]
