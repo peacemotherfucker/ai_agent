@@ -24,8 +24,8 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-# Replace the goal in docker-compose.yml
-sed -i "s/your_goal_here/$1/" docker-compose.yml
+# Export the goal as an environment variable
+export AGENT_GOAL="$1"
 
 # Run the container
 docker-compose up --build

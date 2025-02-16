@@ -12,4 +12,5 @@ services:
       - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
       #to change model interactively use: OPENAI_MODEL=gpt-3.5-turbo docker-compose up
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4-1106-preview}
-    command: --goal "list files in current directory" --config /app/config.yaml
+      - AGENT_GOAL=${AGENT_GOAL}
+    command: --goal "${AGENT_GOAL}" --config /app/config.yaml
