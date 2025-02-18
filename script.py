@@ -27,7 +27,9 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(
 
 # File handlers
 log_dir = '/app/logs'
+data_dir = '/app/data'
 os.makedirs(log_dir, exist_ok=True)
+os.makedirs(data_dir, exist_ok=True)
 
 # Main log file handler - using FileHandler instead of RotatingFileHandler to overwrite on startup
 file_handler = logging.FileHandler(
@@ -143,7 +145,7 @@ class CommandExecutor:
         messages = [
             {
                 "role": "system",
-                "content": "You are a Linux expert assistant. Generate commands to achieve a given goal. Respond ONLY with JSON: {'commands': []}."
+                "content": "You are a self driven AI agent. You are integrated directly into a Linux container with root rights. You can create scripts , write code , create interfaces etc. Your primary tool is linux command line. Generate commands to achieve a given goal. Keep commands short and expect a linux cli response. Respond ONLY with JSON: {'commands': [], 'goal_done': bool}. Only mark goal_done: true, when you think you have reached the goal. When you reach the goal, you will be terminated"
             },
             {
                 "role": "user",
@@ -188,37 +190,22 @@ class CommandExecutor:
                 else:
                     llm_logger.warning("No JSON block found in markdown, trying to parse entire response")
                 
-                try:
-                    parsed_response = json.loads(response_content)
-                except json.JSONDecodeError as e:
-                    llm_logger.error("JSON parsing error: %s\nTrying to clean the content...", str(e))
-                    # Try to find anything that looks like a JSON object
-                    json_match = re.search(r'(\{[^}]+\})', response_content, re.DOTALL)
-                    if json_match:
-                        response_content = json_match.group(1).strip()
-                        llm_logger.info("Found JSON-like content:\n%s", response_content)
-                        parsed_response = json.loads(response_content)
-                    else:
-                        raise ValueError("Could not find valid JSON in response")
-
-                if not isinstance(parsed_response, dict):
-                    raise ValueError(f"Expected dict, got {type(parsed_response)}")
-                if 'commands' not in parsed_response:
-                    raise ValueError(f"Missing required field 'commands' in response: {parsed_response}")
+                parsed_response = json.loads(response_content)
+                
+                # Check if goal is done
+                if parsed_response.get('goal_done', False):
+                    logger.info("Goal completed successfully!")
+                    return {"commands": [], "goal_done": True}
+                    
                 return parsed_response
+
             except json.JSONDecodeError as e:
-                llm_logger.error("Failed to parse JSON response: %s\nContent: %s", str(e), response_content)
-                raise
-            except Exception as e:
-                llm_logger.error("Error processing response: %s\nFull content: %s", str(e), response_content)
-                raise
+                logger.error(f"Failed to parse JSON response: {e}")
+                return {"commands": [], "goal_done": False}
+
         except Exception as e:
-            error_msg = f"LLM API Error: {str(e)}"
-            logger.error(error_msg)
-            llm_logger.error(error_msg)
-            if hasattr(e, '__cause__') and e.__cause__:
-                llm_logger.error("Caused by: %s", str(e.__cause__))
-            raise
+            logger.error(f"Error getting next commands: {e}")
+            return {"commands": [], "goal_done": False}
 
     def run(self, goal: str) -> None:
         logger.info(f"Starting execution with goal: {goal}")
@@ -269,24 +256,47 @@ class CommandExecutor:
                 logger.info(f"  STDERR: {entry['result']['stderr'][:200]}...")
 
 def main():
-    parser = argparse.ArgumentParser(description="Autonomous Linux Command Executor")
-    parser.add_argument("--goal", required=True, help="The objective to achieve")
-    parser.add_argument("--config", default="config.yaml", help="Path to configuration file")
-    parser.add_argument("--max-steps", type=int, help="Override maximum iterations")
+    parser = argparse.ArgumentParser(description='AI Agent for executing commands')
+    parser.add_argument('--goal', required=True, help='The goal to achieve')
+    parser.add_argument('--config', default='config.yaml', help='Path to config file')
     args = parser.parse_args()
 
-    try:
-        config = Config.load(args.config)
-        if args.max_steps:
-            config.max_steps = args.max_steps
-
-        logging.getLogger().setLevel(getattr(logging, config.log_level.upper()))
+    config = Config.load(args.config)
+    executor = CommandExecutor(config)
+    
+    step = 0
+    while step < config.max_steps:
+        logger.info(f"Step {step + 1}/{config.max_steps}")
         
-        executor = CommandExecutor(config)
-        executor.run(args.goal)
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        raise
+        response = executor.get_next_commands(args.goal)
+        
+        # Check if goal is completed
+        if response.get('goal_done', False):
+            logger.info("Goal has been reached! Waiting for new tasks...")
+            # Instead of exiting, sleep indefinitely
+            while True:
+                time.sleep(60)
+            
+        commands = response.get('commands', [])
+        if not commands:
+            logger.warning("No commands received, stopping execution")
+            break
+
+        for command in commands:
+            result = executor.execute_command(command)
+            executor.history.append({
+                "command": command,
+                "result": result
+            })
+            
+            if not result['success']:
+                logger.error(f"Command failed: {command}")
+                return 1
+
+        step += 1
+    
+    logger.warning("Maximum steps reached without completing the goal")
+    return 1
 
 if __name__ == "__main__":
     main()

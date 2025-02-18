@@ -3,3 +3,4 @@ python-dotenv
 pyyaml
 tenacity
 typing-extensions
+flask==3.0.0

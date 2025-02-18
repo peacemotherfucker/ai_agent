@@ -6,12 +6,3 @@ log_level: "INFO"
 
 # List of dangerous commands that will be blocked
 dangerous_commands:
-  - "rm"
-  - "mkfs"
-  - "dd"
-  - "fork"
-  - ">"
-  - "sudo"
-  - "mv"
-  - "chmod"
-  - "chown"

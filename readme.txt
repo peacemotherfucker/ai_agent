@@ -1,4 +1,7 @@
 cp .env.example .env 
 #adapt .env  with your values
-chmod +x run.sh
-./run.sh 'your goal here'
+
+docker compose up -d
+
+it will start a webservice on http://localhost:8080
+you can use the website to control the agent

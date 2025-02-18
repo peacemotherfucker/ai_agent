@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Control Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .console {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        .command { color: #2196f3; }
+        .llm { color: #e91e63; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container my-4">
+        <h1 class="mb-4">AI Agent Control Panel</h1>
+        
+        <!-- Settings Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Settings</h5>
+            </div>
+            <div class="card-body">
+                <form id="settingsForm">
+                    <div class="mb-3">
+                        <label for="systemContent" class="form-label">System Content</label>
+                        <textarea class="form-control" id="systemContent" rows="4">{{ settings.system_content }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="goal" class="form-label">Goal</label>
+                        <input type="text" class="form-control" id="goal" value="{{ settings.goal }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="model" class="form-label">Model</label>
+                        <input type="text" class="form-control" id="model" value="{{ settings.model }}">
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="mb-4">
+            <button id="startButton" class="btn btn-primary me-2">Start Task</button>
+            <button id="stopButton" class="btn btn-danger" disabled>Stop Task</button>
+        </div>
+
+        <!-- Console Output -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Console Output</h5>
+            </div>
+            <div class="card-body p-0">
+                <div id="console" class="console"></div>
+            </div>
+        </div>
+
+        <!-- LLM Messages -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">LLM Messages</h5>
+            </div>
+            <div class="card-body p-0">
+                <div id="llmConsole" class="console"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let lastLogCount = 0;
+
+        function updateConsole(message) {
+            const console = document.getElementById('console');
+            let messageHtml = '';
+            
+            if (message.type === 'command') {
+                messageHtml = `<div class="command">$ ${message.command}</div>`;
+                if (message.stdout) {
+                    messageHtml += `<div>${message.stdout}</div>`;
+                }
+                if (message.stderr) {
+                    messageHtml += `<div class="error">${message.stderr}</div>`;
+                }
+            } else {
+                messageHtml = `<div class="${message.type}">${message.message}</div>`;
+            }
+            
+            console.innerHTML += messageHtml;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        function updateLLMConsole() {
+            fetch('/api/llm_logs')
+                .then(response => response.json())
+                .then(data => {
+                    const llmConsole = document.getElementById('llmConsole');
+                    if (data.logs && data.logs.length > lastLogCount) {
+                        // Only append new logs
+                        const newLogs = data.logs.slice(lastLogCount);
+                        newLogs.forEach(log => {
+                            llmConsole.innerHTML += `<div class="llm">${log}</div>`;
+                        });
+                        lastLogCount = data.logs.length;
+                        llmConsole.scrollTop = llmConsole.scrollHeight;
+                    }
+                });
+        }
+
+        function updateButtons(running) {
+            document.getElementById('startButton').disabled = running;
+            document.getElementById('stopButton').disabled = !running;
+            document.getElementById('systemContent').disabled = running;
+            document.getElementById('goal').disabled = running;
+            document.getElementById('model').disabled = running;
+        }
+
+        function pollStatus() {
+            if (!isRunning) return;
+            
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    isRunning = data.is_running;
+                    updateButtons(isRunning);
+                    
+                    // Update console with new messages
+                    if (data.messages.length > 0) {
+                        data.messages.forEach(updateConsole);
+                    }
+                    
+                    // Update LLM console
+                    updateLLMConsole();
+                    
+                    if (isRunning) {
+                        setTimeout(pollStatus, 1000);
+                    }
+                });
+        }
+
+        document.getElementById('startButton').addEventListener('click', () => {
+            const settings = {
+                system_content: document.getElementById('systemContent').value,
+                goal: document.getElementById('goal').value,
+                model: document.getElementById('model').value
+            };
+
+            fetch('/api/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    isRunning = true;
+                    document.getElementById('console').innerHTML = '';
+                    updateButtons(true);
+                    pollStatus();
+                }
+            });
+        });
+
+        document.getElementById('stopButton').addEventListener('click', () => {
+            fetch('/api/stop', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    isRunning = false;
+                    updateButtons(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
